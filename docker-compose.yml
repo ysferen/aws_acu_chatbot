@@ -29,6 +29,7 @@ services:
      - "8000:8000"
    volumes:
      - ./backend:/app
+     - ./backend/chromadb-data:/app/chromadb-data
    depends_on:
      - db
    environment:
