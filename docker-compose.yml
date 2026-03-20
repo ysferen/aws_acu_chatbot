@@ -1,4 +1,13 @@
 services:
+ ollama:
+    image: ollama/ollama:latest
+    container_name: ollama-docker
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/data
+    env_file:
+      - .env
  db:
    image: postgres:17
    environment:
@@ -9,6 +18,7 @@ services:
      - "5432:5432"
    volumes:
      - postgres_data:/var/lib/postgresql/data
+     - 
    env_file:
      - .env
  
