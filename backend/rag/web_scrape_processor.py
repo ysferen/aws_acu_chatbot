@@ -1,6 +1,9 @@
+import os
+from pathlib import Path
+
 from langchain_core.documents import Document
 
-from .. import printmeup as pm
+from printmeup import printmeup as pm
 
 
 class WebScrapeProcessor:
@@ -19,4 +22,4 @@ class WebScrapeProcessor:
         """Process all documents and return list of chunks and document count."""
         documents = [] # TODO: Implement document retrieval logic here
         chunks = self.split_documents_into_chunks(documents)
-        return chunks, len(chunks)
+        return chunks, len(documents)

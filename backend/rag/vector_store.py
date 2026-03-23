@@ -1,17 +1,22 @@
 import asyncio
 
 from langchain_core.documents import Document
-from langchain_huggingface import HuggingFaceEmbeddings
+from langchain_core.embeddings import Embeddings
 from langchain_chroma import Chroma
 from langchain_core.vectorstores import VectorStoreRetriever
 from typing import List
 import os
 
-from .. import printmeup as pm
+from printmeup import printmeup as pm
 from .web_scrape_processor import WebScrapeProcessor 
 
 VECTOR_STORE_PERSIST_DIR = os.getenv("VECTOR_STORE_PERSIST_DIR", "chromadb-data")
-HGF_EMBEDDING_MODEL_ID = os.getenv("HGF_EMBEDDING_MODEL_ID", "BAAI/bge-small-en-v1.5")
+OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://ollama:11434")
+OLLAMA_EMBEDDING_MODEL_ID = os.getenv(
+    "OLLAMA_EMBEDDING_MODEL_ID",
+    "nomic-embed-text-v2-moe"
+)
+
 
 class VectorStoreManager:
     def __init__(

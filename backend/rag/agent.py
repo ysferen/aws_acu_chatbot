@@ -6,7 +6,7 @@ from langchain_community.chat_models import ChatOllama
 from langchain_core.vectorstores import VectorStoreRetriever
 from langchain.tools import tool
 
-from .. import printmeup as pm
+from printmeup import printmeup as pm
 
 DEFAULT_ACADEMIC_AGENT_MODEL_ID = os.getenv("ACADEMIC_AGENT_MODEL_ID", "qwen2.5:3b")
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://ollama:11434")
