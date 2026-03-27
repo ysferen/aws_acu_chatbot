@@ -1,9 +1,7 @@
-import asyncio
-
 from langchain_core.documents import Document
-from langchain_core.embeddings import Embeddings
 from langchain_chroma import Chroma
 from langchain_core.vectorstores import VectorStoreRetriever
+from langchain_community.embeddings import OllamaEmbeddings
 from typing import List
 import os
 
@@ -22,11 +20,12 @@ class VectorStoreManager:
     def __init__(
         self,
         persist_directory: str = VECTOR_STORE_PERSIST_DIR,
-        hgf_embedding_model_id: str = HGF_EMBEDDING_MODEL_ID,
+        embedding_model_id: str = OLLAMA_EMBEDDING_MODEL_ID,
     ):
         self.persist_directory = persist_directory
-        self.embeddings = HuggingFaceEmbeddings(
-            model_name=hgf_embedding_model_id, model_kwargs={"trust_remote_code": True}
+        self.embeddings = OllamaEmbeddings(
+            base_url=OLLAMA_BASE_URL,
+            model=embedding_model_id,
         )
         self.web_scrape_processor = WebScrapeProcessor()
         self.vectorstore = self.get_vector_store()
@@ -57,12 +56,18 @@ class VectorStoreManager:
         if not chunks or len(chunks) == 0:
             chunks, doc_count = self.web_scrape_processor.process_all_documents()
 
-        pm.inf(
-            f"Creating new vector store at {self.persist_directory}, with {len(chunks)} chunks"
-            + f" from {doc_count} documents."
-            if doc_count
-            else ""
-        )
+        if not chunks:
+            raise ValueError("No chunks were produced for vector store creation")
+
+        if doc_count is not None:
+            pm.inf(
+                f"Creating new vector store at {self.persist_directory} with {len(chunks)} chunks from {doc_count} documents"
+            )
+        else:
+            pm.inf(
+                f"Creating new vector store at {self.persist_directory} with {len(chunks)} chunks"
+            )
+
         self.vectorstore = Chroma.from_documents(
             documents=chunks,
             embedding=self.embeddings,
@@ -125,7 +130,7 @@ class VectorStoreManager:
 def init_vector_store_manager():
     vsm = VectorStoreManager(
         persist_directory=VECTOR_STORE_PERSIST_DIR,
-        hgf_embedding_model_id=HGF_EMBEDDING_MODEL_ID,
+        embedding_model_id=OLLAMA_EMBEDDING_MODEL_ID,
     )
     return vsm, vsm.get_retriever(k=3)
 
