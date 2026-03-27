@@ -59,6 +59,21 @@ docker compose exec ollama ollama pull nomic-embed-text-v2-moe
 - Host execution may fail for service hostnames such as `ollama`.
 - Keep environment variables aligned with Docker networking.
 
+## API contract quick reference (v1)
+
+- Auth/access matrix: `backend/README.md`.
+- Full endpoint contract: `backend/README_API_CONTRACT_V1.md`.
+- OpenAPI spec: `backend/openapi.v1.yaml`.
+- Standard error envelope for all errors:
+
+```json
+{
+	"ok": false,
+	"error": {"code": "...", "message": "...", "details": [], "retryable": false},
+	"meta": {"request_id": "req_...", "timestamp": "2026-03-24T12:00:00Z"}
+}
+```
+
 ## Future objectives
 
 ### RAG quality and reliability

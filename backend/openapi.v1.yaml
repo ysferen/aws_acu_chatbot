@@ -1,0 +1,939 @@
+openapi: 3.1.0
+info:
+  title: AWS ACU Chatbot Backend API
+  version: 1.0.0
+  description: |
+    MVP v1 API contract for the AWS ACU chatbot backend.
+    Base path is `/api/v1`.
+servers:
+  - url: /api/v1
+    description: v1 API
+
+tags:
+  - name: chat
+  - name: sessions
+  - name: feedback
+  - name: sources
+  - name: ingest
+
+paths:
+  /chat:
+    post:
+      tags: [chat]
+      summary: Ask a chatbot question
+      description: |
+        Accepts a question, creates or reuses a session, and returns final answer with traceable citations.
+        If `stream=true`, partial token events are delivered over WebSocket; final response is still returned in this HTTP response.
+      operationId: postChat
+      security:
+        - sessionCookie: []
+        - {}
+      parameters:
+        - $ref: '#/components/parameters/XRequestId'
+        - $ref: '#/components/parameters/IdempotencyKeyHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChatRequest'
+            examples:
+              default:
+                value:
+                  question: What are the tuition payment deadlines?
+                  session_id: ses_01HZZ...
+                  stream: false
+                  client_message_id: cmsg_001
+      responses:
+        '200':
+          description: Chat answer generated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatResponseEnvelope'
+              examples:
+                success:
+                  value:
+                    request_id: req_1
+                    timestamp: '2026-03-23T11:00:00Z'
+                    data:
+                      session:
+                        id: ses_01HZZ...
+                        is_new: false
+                      message:
+                        id: msg_01J0...
+                        role: assistant
+                        answer: Tuition is due by the 15th day of each semester.
+                        citations:
+                          - citation_id: cit_01
+                            source_id: src_aa11
+                            chunk_id: chunk_0009
+                            snippet: Payment deadline is the 15th day of the semester.
+                            title: Student Finance Policy
+                            url: https://university.example.edu/finance/policy
+                            page: 4
+                            doc_metadata:
+                              file_name: finance_policy.pdf
+                              source: policy_repo
+                              chunk_start: 330
+                              chunk_end: 520
+                            score: 0.93
+                        created_at: '2026-03-23T11:00:00Z'
+                      stream:
+                        enabled: false
+                        transport: null
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '409':
+          $ref: '#/components/responses/ConflictError'
+        '429':
+          $ref: '#/components/responses/RateLimitedError'
+        '504':
+          $ref: '#/components/responses/UpstreamTimeoutError'
+
+  /sessions/{id}/messages:
+    get:
+      tags: [sessions]
+      summary: Get session message history
+      operationId: getSessionMessages
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/XRequestId'
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Session ID
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: cursor
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Opaque forward pagination cursor
+        - name: order
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [asc, desc]
+            default: asc
+      responses:
+        '200':
+          description: Message history
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionMessagesResponseEnvelope'
+              examples:
+                success:
+                  value:
+                    request_id: req_2
+                    timestamp: '2026-03-23T11:05:00Z'
+                    data:
+                      session_id: ses_01HZZ...
+                      messages:
+                        - id: msg_u1
+                          role: user
+                          content: When is orientation week?
+                          created_at: '2026-03-23T10:55:00Z'
+                        - id: msg_a1
+                          role: assistant
+                          content: Orientation starts on Sept 2.
+                          citations:
+                            - citation_id: cit_99
+                              source_id: src_ori
+                              chunk_id: chunk_010
+                              snippet: Orientation Week begins September 2.
+                              title: Academic Calendar
+                              url: https://university.example.edu/calendar
+                              page: 1
+                              doc_metadata:
+                                file_name: calendar.pdf
+                                source: calendar_repo
+                                chunk_start: 0
+                                chunk_end: 120
+                              score: 0.96
+                          created_at: '2026-03-23T10:55:02Z'
+                      pagination:
+                        limit: 20
+                        next_cursor: cur_abc
+                        has_more: true
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+  /feedback:
+    post:
+      tags: [feedback]
+      summary: Submit feedback for an assistant message
+      operationId: postFeedback
+      security:
+        - sessionCookie: []
+        - {}
+      parameters:
+        - $ref: '#/components/parameters/XRequestId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FeedbackRequest'
+            examples:
+              default:
+                value:
+                  session_id: ses_01HZZ...
+                  message_id: msg_01J0...
+                  rating: down
+                  reason: incorrect
+                  comment: The deadline appears outdated.
+      responses:
+        '201':
+          description: Feedback created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FeedbackResponseEnvelope'
+              examples:
+                success:
+                  value:
+                    request_id: req_3
+                    timestamp: '2026-03-23T11:10:00Z'
+                    data:
+                      feedback:
+                        id: fb_01
+                        session_id: ses_01HZZ...
+                        message_id: msg_01J0...
+                        rating: down
+                        reason: incorrect
+                        comment: The deadline appears outdated.
+                        created_at: '2026-03-23T11:10:00Z'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '409':
+          $ref: '#/components/responses/ConflictError'
+
+  /sources/{source_id}:
+    get:
+      tags: [sources]
+      summary: Retrieve source drill-down details
+      operationId: getSourceById
+      security:
+        - {}
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/XRequestId'
+        - name: source_id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: chunk_id
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Optional chunk id to return a specific chunk view
+      responses:
+        '200':
+          description: Source drill-down
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SourceResponseEnvelope'
+              examples:
+                success:
+                  value:
+                    request_id: req_4
+                    timestamp: '2026-03-23T11:15:00Z'
+                    data:
+                      source_id: src_7f8a
+                      title: Library Services Handbook
+                      url: https://university.example.edu/library/services
+                      chunk_id: chunk_0031
+                      snippet: Library opening hours are 08:00-22:00 Monday-Friday.
+                      page: 2
+                      doc_metadata:
+                        file_name: library_services_handbook.pdf
+                        document_type: policy_pdf
+                        source: catalog:handbook
+                        ingest_id: ing_01K...
+                        published_at: '2025-09-01'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+  /ingest:
+    post:
+      tags: [ingest]
+      summary: Submit ingestion job (admin/internal)
+      operationId: postIngest
+      security:
+        - internalApiKey: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/XRequestId'
+        - $ref: '#/components/parameters/IdempotencyKeyHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IngestRequest'
+            examples:
+              default:
+                value:
+                  idempotency_key: ing-key-20260323-001
+                  items:
+                    - type: url
+                      value: https://university.example.edu/admissions/fees
+                      metadata:
+                        title: Admissions Fees
+                        document_type: web_page
+                        source: admissions_site
+                    - type: document
+                      value: s3://internal-docs/finance_policy.pdf
+                      metadata:
+                        title: Finance Policy
+                        document_type: policy_pdf
+                        source: policy_repo
+                  options:
+                    chunk_size: 1000
+                    chunk_overlap: 200
+                    replace_existing: false
+      responses:
+        '202':
+          description: Ingest accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IngestResponseEnvelope'
+              examples:
+                accepted:
+                  value:
+                    request_id: req_5
+                    timestamp: '2026-03-23T11:20:00Z'
+                    data:
+                      job_id: job_ing_01
+                      status: accepted
+                      idempotency_key: ing-key-20260323-001
+                      accepted_count: 2
+                      duplicate: false
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '409':
+          $ref: '#/components/responses/ConflictError'
+        '429':
+          $ref: '#/components/responses/RateLimitedError'
+
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: sessionid
+      description: Django session cookie
+    internalApiKey:
+      type: apiKey
+      in: header
+      name: Authorization
+      description: Internal/admin credential mapped to `internal` or `admin` role
+
+  parameters:
+    XRequestId:
+      name: X-Request-Id
+      in: header
+      required: false
+      schema:
+        type: string
+      description: Optional client correlation id
+    IdempotencyKeyHeader:
+      name: Idempotency-Key
+      in: header
+      required: false
+      schema:
+        type: string
+      description: Optional idempotency key alias; request body value wins if both are present
+
+  responses:
+    ValidationError:
+      description: Request validation failed
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+          examples:
+            default:
+              value:
+                request_id: req_1
+                timestamp: '2026-03-23T11:00:00Z'
+                error:
+                  code: VALIDATION_ERROR
+                  message: Invalid request payload.
+                  details:
+                    - field: question
+                      reason: must_not_be_blank
+                  retryable: false
+    UnauthorizedError:
+      description: Authentication required or invalid
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+          examples:
+            default:
+              value:
+                request_id: req_x
+                timestamp: '2026-03-23T11:00:00Z'
+                error:
+                  code: UNAUTHORIZED
+                  message: Authentication required.
+                  details: []
+                  retryable: false
+    ForbiddenError:
+      description: Authenticated but not allowed
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+          examples:
+            default:
+              value:
+                request_id: req_x
+                timestamp: '2026-03-23T11:00:00Z'
+                error:
+                  code: FORBIDDEN
+                  message: You do not have permission to perform this action.
+                  details: []
+                  retryable: false
+    NotFoundError:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+          examples:
+            default:
+              value:
+                request_id: req_x
+                timestamp: '2026-03-23T11:00:00Z'
+                error:
+                  code: NOT_FOUND
+                  message: Resource not found.
+                  details: []
+                  retryable: false
+    ConflictError:
+      description: Request conflict
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+          examples:
+            default:
+              value:
+                request_id: req_x
+                timestamp: '2026-03-23T11:00:00Z'
+                error:
+                  code: CONFLICT
+                  message: Request conflicts with existing state.
+                  details: []
+                  retryable: false
+    RateLimitedError:
+      description: Too many requests
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+          examples:
+            default:
+              value:
+                request_id: req_x
+                timestamp: '2026-03-23T11:00:00Z'
+                error:
+                  code: RATE_LIMITED
+                  message: Rate limit exceeded.
+                  details:
+                    - field: retry_after_seconds
+                      reason: '60'
+                  retryable: true
+    UpstreamTimeoutError:
+      description: Upstream dependency timeout
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+          examples:
+            default:
+              value:
+                request_id: req_x
+                timestamp: '2026-03-23T11:00:00Z'
+                error:
+                  code: UPSTREAM_TIMEOUT
+                  message: Upstream service timeout.
+                  details: []
+                  retryable: true
+
+  schemas:
+    IsoTimestamp:
+      type: string
+      format: date-time
+      examples: ['2026-03-23T11:00:00Z']
+
+    ErrorDetail:
+      type: object
+      additionalProperties: false
+      properties:
+        field:
+          type: string
+        reason:
+          type: string
+      required: [field, reason]
+
+    ErrorBody:
+      type: object
+      additionalProperties: false
+      properties:
+        code:
+          type: string
+          enum:
+            - VALIDATION_ERROR
+            - UNAUTHORIZED
+            - FORBIDDEN
+            - NOT_FOUND
+            - CONFLICT
+            - RATE_LIMITED
+            - UPSTREAM_TIMEOUT
+            - INTERNAL_ERROR
+        message:
+          type: string
+        details:
+          type: array
+          items:
+            $ref: '#/components/schemas/ErrorDetail'
+        retryable:
+          type: boolean
+      required: [code, message, details, retryable]
+
+    ErrorEnvelope:
+      type: object
+      additionalProperties: false
+      properties:
+        request_id:
+          type: string
+        timestamp:
+          $ref: '#/components/schemas/IsoTimestamp'
+        error:
+          $ref: '#/components/schemas/ErrorBody'
+      required: [request_id, timestamp, error]
+
+    CitationDocMetadata:
+      type: object
+      additionalProperties: true
+      properties:
+        file_name:
+          type: string
+        source:
+          type: string
+        chunk_start:
+          type: integer
+        chunk_end:
+          type: integer
+        document_type:
+          type: string
+        ingest_id:
+          type: string
+        published_at:
+          type: string
+      required: [file_name, source]
+
+    Citation:
+      type: object
+      additionalProperties: false
+      properties:
+        citation_id:
+          type: string
+        source_id:
+          type: string
+        chunk_id:
+          type: string
+        snippet:
+          type: string
+        title:
+          type: string
+        url:
+          type: string
+          format: uri
+        page:
+          type: integer
+          minimum: 1
+        doc_metadata:
+          $ref: '#/components/schemas/CitationDocMetadata'
+        score:
+          type: number
+          minimum: 0
+          maximum: 1
+      required:
+        - citation_id
+        - source_id
+        - chunk_id
+        - snippet
+        - title
+        - url
+        - page
+        - doc_metadata
+        - score
+
+    SessionRef:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+        is_new:
+          type: boolean
+      required: [id, is_new]
+
+    ChatAssistantMessage:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+        role:
+          type: string
+          enum: [assistant]
+        answer:
+          type: string
+        citations:
+          type: array
+          items:
+            $ref: '#/components/schemas/Citation'
+        created_at:
+          $ref: '#/components/schemas/IsoTimestamp'
+      required: [id, role, answer, citations, created_at]
+
+    StreamMetadata:
+      type: object
+      additionalProperties: false
+      properties:
+        enabled:
+          type: boolean
+        transport:
+          type: [string, 'null']
+          enum: [websocket, null]
+        channel:
+          type: string
+      required: [enabled, transport]
+
+    ChatRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        question:
+          type: string
+          minLength: 1
+          maxLength: 4000
+        session_id:
+          type: [string, 'null']
+        stream:
+          type: boolean
+        client_message_id:
+          type: string
+      required: [question, stream]
+
+    ChatResponseData:
+      type: object
+      additionalProperties: false
+      properties:
+        session:
+          $ref: '#/components/schemas/SessionRef'
+        message:
+          $ref: '#/components/schemas/ChatAssistantMessage'
+        stream:
+          $ref: '#/components/schemas/StreamMetadata'
+      required: [session, message, stream]
+
+    ChatResponseEnvelope:
+      type: object
+      additionalProperties: false
+      properties:
+        request_id:
+          type: string
+        timestamp:
+          $ref: '#/components/schemas/IsoTimestamp'
+        data:
+          $ref: '#/components/schemas/ChatResponseData'
+      required: [request_id, timestamp, data]
+
+    Message:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+        role:
+          type: string
+          enum: [user, assistant, system]
+        content:
+          type: string
+        citations:
+          type: array
+          items:
+            $ref: '#/components/schemas/Citation'
+        created_at:
+          $ref: '#/components/schemas/IsoTimestamp'
+      required: [id, role, content, created_at]
+
+    Pagination:
+      type: object
+      additionalProperties: false
+      properties:
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 100
+        next_cursor:
+          type: [string, 'null']
+        has_more:
+          type: boolean
+      required: [limit, next_cursor, has_more]
+
+    SessionMessagesData:
+      type: object
+      additionalProperties: false
+      properties:
+        session_id:
+          type: string
+        messages:
+          type: array
+          items:
+            $ref: '#/components/schemas/Message'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+      required: [session_id, messages, pagination]
+
+    SessionMessagesResponseEnvelope:
+      type: object
+      additionalProperties: false
+      properties:
+        request_id:
+          type: string
+        timestamp:
+          $ref: '#/components/schemas/IsoTimestamp'
+        data:
+          $ref: '#/components/schemas/SessionMessagesData'
+      required: [request_id, timestamp, data]
+
+    FeedbackRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        session_id:
+          type: string
+        message_id:
+          type: string
+        rating:
+          type: string
+          enum: [up, down]
+        reason:
+          type: string
+          enum: [incorrect, incomplete, unsafe, other]
+        comment:
+          type: string
+          maxLength: 1000
+      required: [session_id, message_id, rating]
+
+    Feedback:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+        session_id:
+          type: string
+        message_id:
+          type: string
+        rating:
+          type: string
+          enum: [up, down]
+        reason:
+          type: string
+          enum: [incorrect, incomplete, unsafe, other]
+        comment:
+          type: [string, 'null']
+          maxLength: 1000
+        created_at:
+          $ref: '#/components/schemas/IsoTimestamp'
+      required: [id, session_id, message_id, rating, created_at]
+
+    FeedbackResponseData:
+      type: object
+      additionalProperties: false
+      properties:
+        feedback:
+          $ref: '#/components/schemas/Feedback'
+      required: [feedback]
+
+    FeedbackResponseEnvelope:
+      type: object
+      additionalProperties: false
+      properties:
+        request_id:
+          type: string
+        timestamp:
+          $ref: '#/components/schemas/IsoTimestamp'
+        data:
+          $ref: '#/components/schemas/FeedbackResponseData'
+      required: [request_id, timestamp, data]
+
+    SourceDrillDown:
+      type: object
+      additionalProperties: false
+      properties:
+        source_id:
+          type: string
+        title:
+          type: string
+        url:
+          type: string
+          format: uri
+        chunk_id:
+          type: string
+        snippet:
+          type: string
+        page:
+          type: integer
+          minimum: 1
+        doc_metadata:
+          $ref: '#/components/schemas/CitationDocMetadata'
+      required: [source_id, title, url, chunk_id, snippet, page, doc_metadata]
+
+    SourceResponseEnvelope:
+      type: object
+      additionalProperties: false
+      properties:
+        request_id:
+          type: string
+        timestamp:
+          $ref: '#/components/schemas/IsoTimestamp'
+        data:
+          $ref: '#/components/schemas/SourceDrillDown'
+      required: [request_id, timestamp, data]
+
+    IngestItemMetadata:
+      type: object
+      additionalProperties: true
+      properties:
+        title:
+          type: string
+        document_type:
+          type: string
+        source:
+          type: string
+      required: [title, document_type, source]
+
+    IngestItem:
+      type: object
+      additionalProperties: false
+      properties:
+        type:
+          type: string
+          enum: [url, document, text]
+        value:
+          type: string
+          minLength: 1
+        metadata:
+          $ref: '#/components/schemas/IngestItemMetadata'
+      required: [type, value, metadata]
+
+    IngestOptions:
+      type: object
+      additionalProperties: false
+      properties:
+        chunk_size:
+          type: integer
+          minimum: 1
+        chunk_overlap:
+          type: integer
+          minimum: 0
+        replace_existing:
+          type: boolean
+
+    IngestRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        idempotency_key:
+          type: string
+          minLength: 8
+          maxLength: 128
+        items:
+          type: array
+          minItems: 1
+          maxItems: 100
+          items:
+            $ref: '#/components/schemas/IngestItem'
+        options:
+          $ref: '#/components/schemas/IngestOptions'
+      required: [idempotency_key, items]
+
+    IngestResponseData:
+      type: object
+      additionalProperties: false
+      properties:
+        job_id:
+          type: string
+        status:
+          type: string
+          enum: [accepted]
+        idempotency_key:
+          type: string
+        accepted_count:
+          type: integer
+          minimum: 0
+        duplicate:
+          type: boolean
+      required: [job_id, status, idempotency_key, accepted_count, duplicate]
+
+    IngestResponseEnvelope:
+      type: object
+      additionalProperties: false
+      properties:
+        request_id:
+          type: string
+        timestamp:
+          $ref: '#/components/schemas/IsoTimestamp'
+        data:
+          $ref: '#/components/schemas/IngestResponseData'
+      required: [request_id, timestamp, data]
