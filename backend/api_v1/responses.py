@@ -13,10 +13,17 @@ def get_request_id(request) -> str:
 
 
 def success_response(request, data, status=200):
+    request_id = get_request_id(request)
+    timestamp = utc_timestamp()
     return JsonResponse(
         {
-            "request_id": get_request_id(request),
-            "timestamp": utc_timestamp(),
+            "ok": True,
+            "meta": {
+                "request_id": request_id,
+                "timestamp": timestamp,
+            },
+            "request_id": request_id,
+            "timestamp": timestamp,
             "data": data,
         },
         status=status,
@@ -24,15 +31,20 @@ def success_response(request, data, status=200):
 
 
 def error_response(request, status: int, code: str, message: str, details=None, retryable=False):
+    request_id = get_request_id(request)
+    timestamp = utc_timestamp()
     return JsonResponse(
         {
-            "request_id": get_request_id(request),
-            "timestamp": utc_timestamp(),
+            "ok": False,
             "error": {
                 "code": code,
                 "message": message,
                 "details": details or [],
                 "retryable": retryable,
+            },
+            "meta": {
+                "request_id": request_id,
+                "timestamp": timestamp,
             },
         },
         status=status,

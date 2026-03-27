@@ -12,13 +12,15 @@
 
 ## Auth/session model
 
-### Auth expectations by endpoint
+### Auth matrix by endpoint
 
-- `POST /chat`: `anonymous` or `student` allowed.
-- `GET /sessions/{id}/messages`: owner (`anonymous` with matching session token or authenticated `student` owner) only.
-- `POST /feedback`: `anonymous` or `student` allowed for own session/message only.
-- `GET /sources/{source_id}`: `anonymous` and `student` allowed.
-- `POST /ingest`: `admin` or `internal` only.
+| Endpoint | anonymous | student | admin/staff | internal_service |
+|---|---:|---:|---:|---:|
+| `POST /chat` | ✅ | ✅ | ❌ | ❌ |
+| `GET /sessions/{id}/messages` | ✅ owner only | ✅ owner only | ❌ | ❌ |
+| `POST /feedback` | ✅ owner + assistant message only | ✅ owner + assistant message only | ❌ | ❌ |
+| `GET /sources/{source_id}` | ✅ | ✅ | ✅ | ✅ |
+| `POST /ingest` | ❌ | ❌ | ✅ | ✅ (`ingest:write`) |
 
 ### Authentication mechanism (v1)
 
@@ -146,18 +148,28 @@ Success envelope:
 
 ```json
 {
+  "ok": true,
+  "meta": {
+    "request_id": "req_0b7db920d9f44b7e",
+    "timestamp": "2026-03-23T10:12:31Z"
+  },
   "request_id": "req_0b7db920d9f44b7e",
   "timestamp": "2026-03-23T10:12:31Z",
   "data": {}
 }
 ```
 
+Notes:
+- `meta.request_id` is always present.
+- If `X-Request-Id` is supplied, that value is echoed in `meta.request_id`; otherwise server generates `req_<hex>`.
+- `meta.timestamp` is ISO-8601 UTC.
+- Top-level `request_id` and `timestamp` are retained for backward compatibility.
+
 Error envelope:
 
 ```json
 {
-  "request_id": "req_0b7db920d9f44b7e",
-  "timestamp": "2026-03-23T10:12:31Z",
+  "ok": false,
   "error": {
     "code": "VALIDATION_ERROR",
     "message": "Invalid request payload.",
@@ -168,19 +180,26 @@ Error envelope:
       }
     ],
     "retryable": false
+  },
+  "meta": {
+    "request_id": "req_0b7db920d9f44b7e",
+    "timestamp": "2026-03-23T10:12:31Z"
   }
 }
 ```
 
-Standard error codes:
-- `VALIDATION_ERROR` (`400`)
-- `UNAUTHORIZED` (`401`)
-- `FORBIDDEN` (`403`)
-- `NOT_FOUND` (`404`)
-- `CONFLICT` (`409`)
-- `RATE_LIMITED` (`429`)
-- `UPSTREAM_TIMEOUT` (`504`)
-- `INTERNAL_ERROR` (`500`)
+Standard status/code matrix:
+- `200` `OK` (chat, sessions, sources)
+- `201` `CREATED` (feedback)
+- `202` `ACCEPTED` (ingest; duplicates return `duplicate=true`)
+- `400` `VALIDATION_ERROR`
+- `401` `UNAUTHORIZED`
+- `403` `FORBIDDEN`
+- `404` `NOT_FOUND`
+- `409` `CONFLICT`
+- `429` `RATE_LIMITED` (details include `retry_after_seconds`)
+- `500` `INTERNAL_ERROR`
+- `504` `UPSTREAM_TIMEOUT`
 
 ## Endpoint contracts
 

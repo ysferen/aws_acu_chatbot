@@ -1,6 +1,7 @@
 import json
 
 from django.db import transaction
+from django.db.models import Q
 from django.http import HttpRequest
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_POST
@@ -17,6 +18,7 @@ from .auth import (
 )
 from .errors import ApiError
 from .models import ChatMessage, ChatSession, Citation, Feedback, IngestJob, SourceChunk
+from .rate_limit import check_rate_limit
 from .responses import error_response, success_response
 
 
@@ -60,6 +62,15 @@ def chat(request: HttpRequest):
     try:
         context = resolve_auth_context(request)
         require_roles(context, {ROLE_ANONYMOUS, ROLE_STUDENT})
+
+        retry_after = check_rate_limit(request, context, scope="chat", limit=10)
+        if retry_after is not None:
+            raise ApiError(
+                429,
+                "RATE_LIMITED",
+                "Rate limit exceeded.",
+                details=[{"field": "retry_after_seconds", "reason": "wait", "value": retry_after}],
+            )
 
         payload = _parse_json_body(request)
         question = (payload.get("question") or "").strip()
@@ -159,6 +170,8 @@ def session_messages(request: HttpRequest, id: str):
         if order not in {"asc", "desc"}:
             raise ApiError(400, "VALIDATION_ERROR", "Invalid request payload.", details=[{"field": "order", "reason": "invalid_choice"}])
 
+        cursor = request.GET.get("cursor")
+
         chat_session = ChatSession.objects.filter(id=id).first()
         if not chat_session:
             raise ApiError(404, "NOT_FOUND", "Session not found.")
@@ -166,7 +179,25 @@ def session_messages(request: HttpRequest, id: str):
         enforce_owner(request, context, chat_session, hide_existence=True)
 
         queryset = ChatMessage.objects.filter(session=chat_session)
-        if order == "desc":
+        if cursor:
+            cursor_message = ChatMessage.objects.filter(id=cursor, session=chat_session).first()
+            if not cursor_message:
+                raise ApiError(400, "VALIDATION_ERROR", "Invalid request payload.", details=[{"field": "cursor", "reason": "invalid"}])
+
+            if order == "asc":
+                queryset = queryset.filter(
+                    Q(created_at__gt=cursor_message.created_at)
+                    | Q(created_at=cursor_message.created_at, id__gt=cursor_message.id)
+                )
+            else:
+                queryset = queryset.filter(
+                    Q(created_at__lt=cursor_message.created_at)
+                    | Q(created_at=cursor_message.created_at, id__lt=cursor_message.id)
+                )
+
+        if order == "asc":
+            queryset = queryset.order_by("created_at", "id")
+        else:
             queryset = queryset.order_by("-created_at", "-id")
 
         messages = list(queryset[: limit + 1])
@@ -192,12 +223,20 @@ def session_messages(request: HttpRequest, id: str):
         return error_response(request, exc.status, exc.code, exc.message, exc.details, exc.retryable)
 
 
-@csrf_exempt
 @require_POST
 def feedback(request: HttpRequest):
     try:
         context = resolve_auth_context(request)
         require_roles(context, {ROLE_ANONYMOUS, ROLE_STUDENT})
+
+        retry_after = check_rate_limit(request, context, scope="feedback", limit=30)
+        if retry_after is not None:
+            raise ApiError(
+                429,
+                "RATE_LIMITED",
+                "Rate limit exceeded.",
+                details=[{"field": "retry_after_seconds", "reason": "wait", "value": retry_after}],
+            )
 
         payload = _parse_json_body(request)
         session_id = payload.get("session_id")
@@ -235,6 +274,17 @@ def feedback(request: HttpRequest):
         message = ChatMessage.objects.filter(id=message_id, session=chat_session).first()
         if not message:
             raise ApiError(404, "NOT_FOUND", "Message not found.")
+
+        if message.role != ChatMessage.ROLE_ASSISTANT:
+            raise ApiError(
+                400,
+                "VALIDATION_ERROR",
+                "Invalid request payload.",
+                details=[{"field": "message_id", "reason": "must_reference_assistant_message"}],
+            )
+
+        if Feedback.objects.filter(message=message).exists():
+            raise ApiError(409, "CONFLICT", "Feedback already exists for this message.")
 
         feedback_entry = Feedback.objects.create(
             session=chat_session,
@@ -306,6 +356,15 @@ def ingest(request: HttpRequest):
         if context.role == ROLE_INTERNAL_SERVICE and (not context.service_token or not context.service_token.has_scope("ingest:write")):
             raise ApiError(403, "FORBIDDEN", "Service token does not have required scope.")
 
+        retry_after = check_rate_limit(request, context, scope="ingest", limit=5)
+        if retry_after is not None:
+            raise ApiError(
+                429,
+                "RATE_LIMITED",
+                "Rate limit exceeded.",
+                details=[{"field": "retry_after_seconds", "reason": "wait", "value": retry_after}],
+            )
+
         payload = _parse_json_body(request)
         items = payload.get("items")
         body_idempotency_key = payload.get("idempotency_key")
@@ -319,8 +378,22 @@ def ingest(request: HttpRequest):
         if details:
             raise ApiError(400, "VALIDATION_ERROR", "Invalid request payload.", details=details)
 
-        if idempotency_key and IngestJob.objects.filter(idempotency_key=idempotency_key).exists():
-            raise ApiError(409, "CONFLICT", "Idempotency key already exists.")
+        existing_job = None
+        if idempotency_key:
+            existing_job = IngestJob.objects.filter(idempotency_key=idempotency_key).first()
+
+        if existing_job:
+            return success_response(
+                request,
+                {
+                    "job_id": existing_job.id,
+                    "status": existing_job.status,
+                    "idempotency_key": idempotency_key,
+                    "accepted_count": existing_job.accepted_count,
+                    "duplicate": True,
+                },
+                status=202,
+            )
 
         job = IngestJob.objects.create(
             idempotency_key=idempotency_key,
