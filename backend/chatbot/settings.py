@@ -11,10 +11,50 @@ https://docs.djangoproject.com/en/6.0/ref/settings/
 """
 
 import os
+import sys
 from pathlib import Path
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+
+def _load_env_file(path: Path, *, override: bool = False) -> None:
+    if not path.exists():
+        return
+
+    for raw_line in path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+
+        key, value = line.split("=", 1)
+        key = key.strip()
+        value = value.strip().strip('"').strip("'")
+        if not key:
+            continue
+
+        if override:
+            os.environ[key] = value
+        else:
+            os.environ.setdefault(key, value)
+
+
+def _env_int(name: str, default: int) -> int:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    try:
+        return int(raw)
+    except ValueError:
+        return default
+
+
+# Local runs read .env by default; container environments keep precedence.
+_load_env_file(BASE_DIR.parent / ".env", override=False)
+
+# Tests can override base values (for example sqlite test DB settings).
+if "test" in sys.argv:
+    _load_env_file(BASE_DIR / ".env.test", override=True)
 
 
 # Quick-start development settings - unsuitable for production
@@ -123,3 +163,10 @@ USE_TZ = True
 STATIC_URL = 'static/'
 
 INTERNAL_SERVICE_TOKEN_HEADER_PREFIX = os.getenv('INTERNAL_SERVICE_TOKEN_HEADER_PREFIX', 'Bearer')
+
+API_RATE_LIMIT_CHAT_LIMIT = _env_int('API_RATE_LIMIT_CHAT_LIMIT', 10)
+API_RATE_LIMIT_CHAT_WINDOW_SECONDS = _env_int('API_RATE_LIMIT_CHAT_WINDOW_SECONDS', 60)
+API_RATE_LIMIT_FEEDBACK_LIMIT = _env_int('API_RATE_LIMIT_FEEDBACK_LIMIT', 30)
+API_RATE_LIMIT_FEEDBACK_WINDOW_SECONDS = _env_int('API_RATE_LIMIT_FEEDBACK_WINDOW_SECONDS', 60)
+API_RATE_LIMIT_INGEST_LIMIT = _env_int('API_RATE_LIMIT_INGEST_LIMIT', 5)
+API_RATE_LIMIT_INGEST_WINDOW_SECONDS = _env_int('API_RATE_LIMIT_INGEST_WINDOW_SECONDS', 60)

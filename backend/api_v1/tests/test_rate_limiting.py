@@ -2,7 +2,7 @@ import json
 
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
-from django.test import Client, TestCase
+from django.test import Client, TestCase, override_settings
 
 from api_v1.models import ChatMessage, ChatSession
 
@@ -88,6 +88,31 @@ class RateLimitingTests(TestCase):
                     "items": [{"type": "url", "value": "https://example.edu/over"}],
                 }
             ),
+            content_type="application/json",
+        )
+        self._assert_429_contract(limited)
+
+    @override_settings(API_RATE_LIMIT_CHAT_LIMIT=2)
+    def test_chat_rate_limit_uses_settings_threshold(self):
+        client = Client()
+
+        response1 = client.post(
+            "/api/v1/chat",
+            data=json.dumps({"question": "q-1", "stream": False}),
+            content_type="application/json",
+        )
+        self.assertEqual(response1.status_code, 200)
+
+        response2 = client.post(
+            "/api/v1/chat",
+            data=json.dumps({"question": "q-2", "stream": False}),
+            content_type="application/json",
+        )
+        self.assertEqual(response2.status_code, 200)
+
+        limited = client.post(
+            "/api/v1/chat",
+            data=json.dumps({"question": "q-3", "stream": False}),
             content_type="application/json",
         )
         self._assert_429_contract(limited)

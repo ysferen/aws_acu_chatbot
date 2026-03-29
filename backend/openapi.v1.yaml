@@ -54,8 +54,11 @@ paths:
               examples:
                 success:
                   value:
-                    request_id: req_1
-                    timestamp: '2026-03-23T11:00:00Z'
+                    ok: true
+                    meta:
+                      request_id: req_1
+                      timestamp: '2026-03-23T11:00:00Z'
+
                     data:
                       session:
                         id: ses_01HZZ...
@@ -143,9 +146,12 @@ paths:
               examples:
                 success:
                   value:
+                    ok: true
+                    meta:
+                      request_id: req_2
+                      timestamp: '2026-03-23T11:05:00Z'
                     request_id: req_2
-                    timestamp: '2026-03-23T11:05:00Z'
-                    data:
+
                       session_id: ses_01HZZ...
                       messages:
                         - id: msg_u1
@@ -217,10 +223,13 @@ paths:
               examples:
                 success:
                   value:
+                    ok: true
+                    meta:
+                      request_id: req_3
+                      timestamp: '2026-03-23T11:10:00Z'
                     request_id: req_3
                     timestamp: '2026-03-23T11:10:00Z'
-                    data:
-                      feedback:
+
                         id: fb_01
                         session_id: ses_01HZZ...
                         message_id: msg_01J0...
@@ -270,11 +279,14 @@ paths:
               examples:
                 success:
                   value:
+                    ok: true
+                    meta:
+                      request_id: req_4
+                      timestamp: '2026-03-23T11:15:00Z'
                     request_id: req_4
                     timestamp: '2026-03-23T11:15:00Z'
                     data:
-                      source_id: src_7f8a
-                      title: Library Services Handbook
+
                       url: https://university.example.edu/library/services
                       chunk_id: chunk_0031
                       snippet: Library opening hours are 08:00-22:00 Monday-Friday.
@@ -338,12 +350,15 @@ paths:
               examples:
                 accepted:
                   value:
+                    ok: true
+                    meta:
+                      request_id: req_5
+                      timestamp: '2026-03-23T11:20:00Z'
                     request_id: req_5
                     timestamp: '2026-03-23T11:20:00Z'
                     data:
                       job_id: job_ing_01
-                      status: accepted
-                      idempotency_key: ing-key-20260323-001
+
                       accepted_count: 2
                       duplicate: false
         '400':
@@ -396,8 +411,7 @@ components:
           examples:
             default:
               value:
-                request_id: req_1
-                timestamp: '2026-03-23T11:00:00Z'
+                ok: false
                 error:
                   code: VALIDATION_ERROR
                   message: Invalid request payload.
@@ -405,6 +419,9 @@ components:
                     - field: question
                       reason: must_not_be_blank
                   retryable: false
+                meta:
+                  request_id: req_1
+                  timestamp: '2026-03-23T11:00:00Z'
     UnauthorizedError:
       description: Authentication required or invalid
       content:
@@ -414,13 +431,15 @@ components:
           examples:
             default:
               value:
-                request_id: req_x
-                timestamp: '2026-03-23T11:00:00Z'
+                ok: false
                 error:
                   code: UNAUTHORIZED
                   message: Authentication required.
                   details: []
                   retryable: false
+                meta:
+                  request_id: req_x
+                  timestamp: '2026-03-23T11:00:00Z'
     ForbiddenError:
       description: Authenticated but not allowed
       content:
@@ -430,13 +449,15 @@ components:
           examples:
             default:
               value:
-                request_id: req_x
-                timestamp: '2026-03-23T11:00:00Z'
+                ok: false
                 error:
                   code: FORBIDDEN
                   message: You do not have permission to perform this action.
                   details: []
                   retryable: false
+                meta:
+                  request_id: req_x
+                  timestamp: '2026-03-23T11:00:00Z'
     NotFoundError:
       description: Resource not found
       content:
@@ -446,13 +467,15 @@ components:
           examples:
             default:
               value:
-                request_id: req_x
-                timestamp: '2026-03-23T11:00:00Z'
+                ok: false
                 error:
                   code: NOT_FOUND
                   message: Resource not found.
                   details: []
                   retryable: false
+                meta:
+                  request_id: req_x
+                  timestamp: '2026-03-23T11:00:00Z'
     ConflictError:
       description: Request conflict
       content:
@@ -462,13 +485,15 @@ components:
           examples:
             default:
               value:
-                request_id: req_x
-                timestamp: '2026-03-23T11:00:00Z'
+                ok: false
                 error:
                   code: CONFLICT
                   message: Request conflicts with existing state.
                   details: []
                   retryable: false
+                meta:
+                  request_id: req_x
+                  timestamp: '2026-03-23T11:00:00Z'
     RateLimitedError:
       description: Too many requests
       content:
@@ -478,17 +503,20 @@ components:
           examples:
             default:
               value:
-                request_id: req_x
-                timestamp: '2026-03-23T11:00:00Z'
+                ok: false
                 error:
                   code: RATE_LIMITED
                   message: Rate limit exceeded.
                   details:
                     - field: retry_after_seconds
-                      reason: '60'
-                  retryable: true
+                      reason: wait
+                      value: 60
+                  retryable: false
+                meta:
+                  request_id: req_x
+                  timestamp: '2026-03-23T11:00:00Z'
     UpstreamTimeoutError:
-      description: Upstream dependency timeout
+                  retryable: true
       content:
         application/json:
           schema:
@@ -496,13 +524,15 @@ components:
           examples:
             default:
               value:
-                request_id: req_x
-                timestamp: '2026-03-23T11:00:00Z'
+                ok: false
                 error:
                   code: UPSTREAM_TIMEOUT
                   message: Upstream service timeout.
                   details: []
                   retryable: true
+                meta:
+                  request_id: req_x
+                  timestamp: '2026-03-23T11:00:00Z'
 
   schemas:
     IsoTimestamp:
@@ -518,7 +548,22 @@ components:
           type: string
         reason:
           type: string
+        value:
+          oneOf:
+            - type: string
+            - type: number
+            - type: integer
       required: [field, reason]
+
+    Meta:
+      type: object
+      additionalProperties: false
+      properties:
+        request_id:
+          type: string
+        timestamp:
+          $ref: '#/components/schemas/IsoTimestamp'
+      required: [request_id, timestamp]
 
     ErrorBody:
       type: object
@@ -549,13 +594,14 @@ components:
       type: object
       additionalProperties: false
       properties:
-        request_id:
-          type: string
-        timestamp:
-          $ref: '#/components/schemas/IsoTimestamp'
+        ok:
+          type: boolean
+          enum: [false]
         error:
           $ref: '#/components/schemas/ErrorBody'
-      required: [request_id, timestamp, error]
+        meta:
+          $ref: '#/components/schemas/Meta'
+      required: [ok, error, meta]
 
     CitationDocMetadata:
       type: object
@@ -688,13 +734,20 @@ components:
       type: object
       additionalProperties: false
       properties:
+        ok:
+          type: boolean
+          enum: [true]
+        meta:
+          $ref: '#/components/schemas/Meta'
         request_id:
           type: string
+          deprecated: true
         timestamp:
           $ref: '#/components/schemas/IsoTimestamp'
+          deprecated: true
         data:
           $ref: '#/components/schemas/ChatResponseData'
-      required: [request_id, timestamp, data]
+      required: [ok, meta, data]
 
     Message:
       type: object
@@ -747,13 +800,20 @@ components:
       type: object
       additionalProperties: false
       properties:
+        ok:
+          type: boolean
+          enum: [true]
+        meta:
+          $ref: '#/components/schemas/Meta'
         request_id:
           type: string
+          deprecated: true
         timestamp:
           $ref: '#/components/schemas/IsoTimestamp'
+          deprecated: true
         data:
           $ref: '#/components/schemas/SessionMessagesData'
-      required: [request_id, timestamp, data]
+      required: [ok, meta, data]
 
     FeedbackRequest:
       type: object
@@ -809,13 +869,20 @@ components:
       type: object
       additionalProperties: false
       properties:
+        ok:
+          type: boolean
+          enum: [true]
+        meta:
+          $ref: '#/components/schemas/Meta'
         request_id:
           type: string
+          deprecated: true
         timestamp:
           $ref: '#/components/schemas/IsoTimestamp'
+          deprecated: true
         data:
           $ref: '#/components/schemas/FeedbackResponseData'
-      required: [request_id, timestamp, data]
+      required: [ok, meta, data]
 
     SourceDrillDown:
       type: object
@@ -843,13 +910,20 @@ components:
       type: object
       additionalProperties: false
       properties:
+        ok:
+          type: boolean
+          enum: [true]
+        meta:
+          $ref: '#/components/schemas/Meta'
         request_id:
           type: string
+          deprecated: true
         timestamp:
           $ref: '#/components/schemas/IsoTimestamp'
+          deprecated: true
         data:
           $ref: '#/components/schemas/SourceDrillDown'
-      required: [request_id, timestamp, data]
+      required: [ok, meta, data]
 
     IngestItemMetadata:
       type: object
@@ -930,10 +1004,17 @@ components:
       type: object
       additionalProperties: false
       properties:
+        ok:
+          type: boolean
+          enum: [true]
+        meta:
+          $ref: '#/components/schemas/Meta'
         request_id:
           type: string
+          deprecated: true
         timestamp:
           $ref: '#/components/schemas/IsoTimestamp'
+          deprecated: true
         data:
           $ref: '#/components/schemas/IngestResponseData'
-      required: [request_id, timestamp, data]
+      required: [ok, meta, data]

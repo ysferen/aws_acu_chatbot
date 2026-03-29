@@ -2,6 +2,7 @@ import json
 from datetime import datetime
 
 from django.contrib.auth import get_user_model
+from django.core.cache import cache
 from django.test import Client, TestCase
 
 from api_v1.models import Feedback, IngestJob, SourceChunk
@@ -28,6 +29,7 @@ def _assert_error_envelope_shape(test_case: TestCase, payload: dict):
 
 class ErrorEnvelopeContractTests(TestCase):
     def setUp(self):
+        cache.clear()
         user_model = get_user_model()
         self.student = user_model.objects.create_user(username="student_contract", password="pass12345")
         self.staff = user_model.objects.create_user(username="staff_contract", password="pass12345", is_staff=True)
@@ -128,6 +130,7 @@ class ErrorEnvelopeContractTests(TestCase):
 
 class RequestTracingTests(TestCase):
     def setUp(self):
+        cache.clear()
         user_model = get_user_model()
         self.staff = user_model.objects.create_user(username="staff_trace", password="pass12345", is_staff=True)
 
@@ -159,6 +162,7 @@ class RequestTracingTests(TestCase):
 
 class IngestIdempotencyContractTests(TestCase):
     def setUp(self):
+        cache.clear()
         user_model = get_user_model()
         self.staff = user_model.objects.create_user(username="staff_ingest_contract", password="pass12345", is_staff=True)
 

@@ -35,10 +35,16 @@ cd aws_acu_chatbot
 
 - Create/update `.env` at repo root.
 - Confirm important values:
-	- `OLLAMA_BASE_URL=http://ollama:11434`
-	- `ACADEMIC_AGENT_MODEL_ID=<chat-model-tag>`
-	- `OLLAMA_EMBEDDING_MODEL_ID=<embedding-model-tag>`
-	- `VECTOR_STORE_PERSIST_DIR=chromadb-data`
+  - `OLLAMA_BASE_URL=http://ollama:11434`
+  - `ACADEMIC_AGENT_MODEL_ID=<chat-model-tag>`
+  - `OLLAMA_EMBEDDING_MODEL_ID=<embedding-model-tag>`
+  - `VECTOR_STORE_PERSIST_DIR=chromadb-data`
+  - `API_RATE_LIMIT_CHAT_LIMIT=10`
+  - `API_RATE_LIMIT_CHAT_WINDOW_SECONDS=60`
+  - `API_RATE_LIMIT_FEEDBACK_LIMIT=30`
+  - `API_RATE_LIMIT_FEEDBACK_WINDOW_SECONDS=60`
+  - `API_RATE_LIMIT_INGEST_LIMIT=5`
+  - `API_RATE_LIMIT_INGEST_WINDOW_SECONDS=60`
 
 ### 3) Build and start services
 
@@ -68,9 +74,9 @@ docker compose exec ollama ollama pull nomic-embed-text-v2-moe
 
 ```json
 {
-	"ok": false,
-	"error": {"code": "...", "message": "...", "details": [], "retryable": false},
-	"meta": {"request_id": "req_...", "timestamp": "2026-03-24T12:00:00Z"}
+  "ok": false,
+  "error": {"code": "...", "message": "...", "details": [], "retryable": false},
+  "meta": {"request_id": "req_...", "timestamp": "2026-03-24T12:00:00Z"}
 }
 ```
 
