@@ -1,10 +1,12 @@
 import json
 
+from django.conf import settings
 from django.db import transaction
 from django.db.models import Q
 from django.http import HttpRequest
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_POST
+from rag import api_views as rag_services
 
 from .auth import (
     ROLE_ADMIN_STAFF,
@@ -63,7 +65,13 @@ def chat(request: HttpRequest):
         context = resolve_auth_context(request)
         require_roles(context, {ROLE_ANONYMOUS, ROLE_STUDENT})
 
-        retry_after = check_rate_limit(request, context, scope="chat", limit=10)
+        retry_after = check_rate_limit(
+            request,
+            context,
+            scope="chat",
+            limit=settings.API_RATE_LIMIT_CHAT_LIMIT,
+            window_seconds=settings.API_RATE_LIMIT_CHAT_WINDOW_SECONDS,
+        )
         if retry_after is not None:
             raise ApiError(
                 429,
@@ -116,7 +124,16 @@ def chat(request: HttpRequest):
                 content=question,
             )
 
+            # Use shared RAG service module, but keep a deterministic fallback for local/test runs.
             answer_text = "This path is active and ready for OLLAMA integration."
+            try:
+                rag_result = rag_services.generate_chat_answer(question)
+                candidate = str(rag_result.get("answer", "")).strip()
+                if candidate:
+                    answer_text = candidate
+            except Exception:
+                answer_text = "This path is active and ready for OLLAMA integration."
+
             assistant_message = ChatMessage.objects.create(
                 session=chat_session,
                 role=ChatMessage.ROLE_ASSISTANT,
@@ -229,7 +246,13 @@ def feedback(request: HttpRequest):
         context = resolve_auth_context(request)
         require_roles(context, {ROLE_ANONYMOUS, ROLE_STUDENT})
 
-        retry_after = check_rate_limit(request, context, scope="feedback", limit=30)
+        retry_after = check_rate_limit(
+            request,
+            context,
+            scope="feedback",
+            limit=settings.API_RATE_LIMIT_FEEDBACK_LIMIT,
+            window_seconds=settings.API_RATE_LIMIT_FEEDBACK_WINDOW_SECONDS,
+        )
         if retry_after is not None:
             raise ApiError(
                 429,
@@ -356,7 +379,13 @@ def ingest(request: HttpRequest):
         if context.role == ROLE_INTERNAL_SERVICE and (not context.service_token or not context.service_token.has_scope("ingest:write")):
             raise ApiError(403, "FORBIDDEN", "Service token does not have required scope.")
 
-        retry_after = check_rate_limit(request, context, scope="ingest", limit=5)
+        retry_after = check_rate_limit(
+            request,
+            context,
+            scope="ingest",
+            limit=settings.API_RATE_LIMIT_INGEST_LIMIT,
+            window_seconds=settings.API_RATE_LIMIT_INGEST_WINDOW_SECONDS,
+        )
         if retry_after is not None:
             raise ApiError(
                 429,
@@ -402,6 +431,27 @@ def ingest(request: HttpRequest):
             submitted_by_user=context.user if context.role == ROLE_ADMIN_STAFF else None,
             submitted_by_token=context.service_token if context.role == ROLE_INTERNAL_SERVICE else None,
         )
+
+        documents_payload = []
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            item_type = str(item.get("type", "")).strip().lower()
+            value = str(item.get("value", "")).strip()
+            if item_type in {"text", "content"} and value:
+                documents_payload.append(
+                    {
+                        "title": item.get("title", "Ingested text"),
+                        "source": item.get("source", "api_v1_ingest"),
+                        "content": value,
+                    }
+                )
+
+        if documents_payload:
+            try:
+                rag_services.ingest_documents(documents_payload)
+            except Exception:
+                pass
 
         return success_response(
             request,
