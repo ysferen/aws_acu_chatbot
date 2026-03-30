@@ -1,18 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { FormEvent } from 'react'
 import { getSessionMessages, getSourceById, HttpError, postChat, postFeedback } from './lib/apiClient'
-import type { Citation, SessionMessage, SourceResponseData } from './types/api'
+import type { Citation, SourceResponseData } from './types/api'
+import { mapHistoryMessage, type FeedbackReason, type UiMessage } from './models/chat'
+import { formatDateTime } from './utils/dateTime'
 import './App.css'
-
-type FeedbackReason = 'incorrect' | 'incomplete' | 'unsafe' | 'other'
-
-type UiMessage = {
-  id: string
-  role: 'user' | 'assistant' | 'system'
-  content: string
-  createdAt: string
-  citations: Citation[]
-}
 
 function App() {
   const [question, setQuestion] = useState('')
@@ -336,20 +328,6 @@ function App() {
       )}
     </main>
   )
-}
-
-function mapHistoryMessage(message: SessionMessage): UiMessage {
-  return {
-    id: message.id,
-    role: message.role,
-    content: message.content,
-    createdAt: message.created_at,
-    citations: message.citations || [],
-  }
-}
-
-function formatDateTime(isoValue: string): string {
-  return new Date(isoValue).toLocaleString()
 }
 
 export default App
