@@ -240,6 +240,7 @@ def session_messages(request: HttpRequest, id: str):
         return error_response(request, exc.status, exc.code, exc.message, exc.details, exc.retryable)
 
 
+@csrf_exempt
 @require_POST
 def feedback(request: HttpRequest):
     try:
