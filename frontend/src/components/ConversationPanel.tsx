@@ -2,6 +2,7 @@ import type { Dispatch, FormEvent, SetStateAction } from 'react'
 import type { FeedbackReason, UiMessage } from '../models/chat'
 import type { Citation } from '../types/api'
 import { formatDateTime } from '../utils/dateTime'
+import { MessageFeedback } from './MessageFeedback'
 
 type ConversationPanelProps = {
   sessionId: string | null
@@ -78,69 +79,15 @@ export function ConversationPanel({
             )}
 
             {message.role === 'assistant' && (
-              <div className="feedback-box">
-                <label>
-                  Reason
-                  <select
-                    value={feedbackReasonByMessage[message.id] || ''}
-                    onChange={(event) => {
-                      const nextValue = event.target.value
-                      setFeedbackReasonByMessage((current) => {
-                        if (!nextValue) {
-                          const { [message.id]: _removed, ...rest } = current
-                          return rest
-                        }
-                        return {
-                          ...current,
-                          [message.id]: nextValue as FeedbackReason,
-                        }
-                      })
-                    }}
-                  >
-                    <option value="">Optional</option>
-                    <option value="incorrect">Incorrect</option>
-                    <option value="incomplete">Incomplete</option>
-                    <option value="unsafe">Unsafe</option>
-                    <option value="other">Other</option>
-                  </select>
-                </label>
-                <label>
-                  Comment
-                  <input
-                    value={feedbackCommentByMessage[message.id] || ''}
-                    onChange={(event) =>
-                      setFeedbackCommentByMessage((current) => ({
-                        ...current,
-                        [message.id]: event.target.value.slice(0, 1000),
-                      }))
-                    }
-                    placeholder="Optional details"
-                  />
-                </label>
-                <div className="feedback-actions">
-                  <button
-                    type="button"
-                    className="small"
-                    onClick={() => {
-                      void handleFeedback(message.id, 'up')
-                    }}
-                    disabled={Boolean(submittedFeedback[message.id])}
-                  >
-                    Helpful
-                  </button>
-                  <button
-                    type="button"
-                    className="small ghost"
-                    onClick={() => {
-                      void handleFeedback(message.id, 'down')
-                    }}
-                    disabled={Boolean(submittedFeedback[message.id])}
-                  >
-                    Needs work
-                  </button>
-                  {submittedFeedback[message.id] && <span className="feedback-status">Feedback saved</span>}
-                </div>
-              </div>
+              <MessageFeedback
+                messageId={message.id}
+                feedbackReasonByMessage={feedbackReasonByMessage}
+                setFeedbackReasonByMessage={setFeedbackReasonByMessage}
+                feedbackCommentByMessage={feedbackCommentByMessage}
+                setFeedbackCommentByMessage={setFeedbackCommentByMessage}
+                submittedFeedback={submittedFeedback}
+                onFeedback={handleFeedback}
+              />
             )}
           </article>
         ))}
