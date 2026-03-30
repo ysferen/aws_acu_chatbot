@@ -2,6 +2,7 @@ import type { Dispatch, FormEvent, SetStateAction } from 'react'
 import type { FeedbackReason, UiMessage } from '../models/chat'
 import type { Citation } from '../types/api'
 import { formatDateTime } from '../utils/dateTime'
+import { MessageCitations } from './MessageCitations'
 import { MessageFeedback } from './MessageFeedback'
 
 type ConversationPanelProps = {
@@ -57,26 +58,11 @@ export function ConversationPanel({
             </div>
             <p>{message.content}</p>
 
-            {message.citations.length > 0 && (
-              <div className="citations">
-                <p className="caption">Citations</p>
-                <div className="citation-list">
-                  {message.citations.map((citation) => (
-                    <button
-                      key={citation.citation_id}
-                      type="button"
-                      className="citation-chip"
-                      onClick={() => {
-                        void handleCitationClick(citation)
-                      }}
-                      disabled={sourceLoading}
-                    >
-                      {citation.title || citation.source_id}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
+            <MessageCitations
+              citations={message.citations}
+              sourceLoading={sourceLoading}
+              onCitationClick={handleCitationClick}
+            />
 
             {message.role === 'assistant' && (
               <MessageFeedback
