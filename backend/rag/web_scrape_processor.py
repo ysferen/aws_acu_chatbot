@@ -1,6 +1,6 @@
 import os
-from pathlib import Path
 import re
+import hashlib
 
 from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
@@ -13,9 +13,69 @@ class WebScrapeProcessor:
     def __init__(self):
         self.default_chunk_size = int(os.getenv("CHUNK_SIZE", "600"))
         self.default_chunk_overlap = int(os.getenv("CHUNK_OVERLAP", "120"))
+        self.min_content_length = int(os.getenv("MIN_CONTENT_LENGTH", "40"))
 
     def _normalize_text(self, text: str) -> str:
-        return re.sub(r"\s+", " ", text).strip()
+        # Remove control chars and collapse whitespace to keep embeddings stable.
+        cleaned = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]", " ", str(text))
+        return re.sub(r"\s+", " ", cleaned).strip()
+
+    def _normalize_source(self, source: str) -> str:
+        normalized = str(source).strip()
+        return normalized or "manual_input"
+
+    def _content_fingerprint(self, source: str, content: str) -> str:
+        return hashlib.sha256(f"{source}|{content.lower()}".encode("utf-8")).hexdigest()
+
+    def build_documents_from_payload(self, items: list[dict]) -> tuple[list[Document], dict]:
+        """Validate, clean, and deduplicate ingestion payload into LangChain documents."""
+        stats = {
+            "received": len(items),
+            "accepted": 0,
+            "skipped_non_dict": 0,
+            "skipped_empty": 0,
+            "skipped_too_short": 0,
+            "skipped_duplicate": 0,
+        }
+
+        documents: list[Document] = []
+        seen_fingerprints: set[str] = set()
+
+        for index, item in enumerate(items, start=1):
+            if not isinstance(item, dict):
+                stats["skipped_non_dict"] += 1
+                continue
+
+            cleaned_content = self._normalize_text(item.get("content", ""))
+            if not cleaned_content:
+                stats["skipped_empty"] += 1
+                continue
+
+            if len(cleaned_content) < self.min_content_length:
+                stats["skipped_too_short"] += 1
+                continue
+
+            source = self._normalize_source(item.get("source", "manual_input"))
+            fingerprint = self._content_fingerprint(source, cleaned_content)
+            if fingerprint in seen_fingerprints:
+                stats["skipped_duplicate"] += 1
+                continue
+            seen_fingerprints.add(fingerprint)
+
+            title = self._normalize_text(item.get("title", "")) or f"Custom Document {index}"
+            documents.append(
+                Document(
+                    page_content=cleaned_content,
+                    metadata={
+                        "title": title,
+                        "source": source,
+                        "ingestion_type": "api_payload",
+                    },
+                )
+            )
+
+        stats["accepted"] = len(documents)
+        return documents, stats
 
     def _build_demo_documents(self) -> list[Document]:
         # Demo-safe starter set for first-stage ingestion.

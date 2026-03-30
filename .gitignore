@@ -39,3 +39,7 @@ Thumbs.db
 .venv/
 uv.lock
 __pycache__/
+
+# Test files
+test_dedup.py
+test_chat.py

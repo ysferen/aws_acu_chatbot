@@ -50,21 +50,8 @@ def ingest_documents(documents_payload: list[dict]) -> dict:
     if not isinstance(documents_payload, list):
         raise ValueError("documents must be a list")
 
-    documents: list[Document] = []
-    for index, item in enumerate(documents_payload, start=1):
-        content = str(item.get("content", "")).strip()
-        if not content:
-            continue
-        documents.append(
-            Document(
-                page_content=content,
-                metadata={
-                    "title": item.get("title", f"Custom Document {index}"),
-                    "source": item.get("source", "manual_input"),
-                    "ingestion_type": "api_payload",
-                },
-            )
-        )
+    processor = WebScrapeProcessor()
+    documents, stats = processor.build_documents_from_payload(documents_payload)
 
     if not documents:
         raise ValueError("No valid documents found in payload")
@@ -74,6 +61,8 @@ def ingest_documents(documents_payload: list[dict]) -> dict:
         "status": "ingested" if ok else "failed",
         "documents_received": len(documents_payload),
         "documents_ingested": len(documents),
+        "documents_skipped": len(documents_payload) - len(documents),
+        "ingest_stats": stats,
         "mode": "payload",
     }
 
