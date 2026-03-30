@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
-import { getSessionMessages, getSourceById, HttpError, postChat, postFeedback } from '../lib/apiClient'
-import { mapHistoryMessage, type FeedbackReason, type UiMessage } from '../models/chat'
+import { HttpError } from '../lib/apiClient'
+import type { FeedbackReason, UiMessage } from '../models/chat'
+import { fetchCitationSource, fetchSessionHistory, sendFeedback, sendQuestion } from '../services/chatService'
 import type { Citation, SourceResponseData } from '../types/api'
 
 export function useChat() {
@@ -36,8 +37,7 @@ export function useChat() {
 
   async function loadHistory(targetSessionId: string) {
     try {
-      const response = await getSessionMessages(targetSessionId)
-      setMessages(response.messages.map(mapHistoryMessage))
+      setMessages(await fetchSessionHistory(targetSessionId))
       setErrorText(null)
     } catch (error) {
       if (error instanceof HttpError) {
@@ -68,11 +68,7 @@ export function useChat() {
     setErrorText(null)
 
     try {
-      const response = await postChat({
-        question: trimmedQuestion,
-        stream: false,
-        session_id: sessionId || undefined,
-      })
+      const response = await sendQuestion(trimmedQuestion, sessionId || undefined)
 
       if (!sessionId) {
         setSessionId(response.session.id)
@@ -113,9 +109,9 @@ export function useChat() {
     }
 
     try {
-      await postFeedback({
-        session_id: sessionId,
-        message_id: messageId,
+      await sendFeedback({
+        sessionId,
+        messageId,
         rating,
         reason: feedbackReasonByMessage[messageId],
         comment: feedbackCommentByMessage[messageId] || undefined,
@@ -135,7 +131,7 @@ export function useChat() {
   async function loadSource(citation: Citation) {
     try {
       setSourceLoading(true)
-      const source = await getSourceById(citation.source_id, citation.chunk_id)
+      const source = await fetchCitationSource(citation)
       setSelectedSource(source)
       setErrorText(null)
     } catch (error) {
