@@ -27,7 +27,7 @@ AWS ACU Chatbot is a container-first university assistant backend built with Dja
 ### 1) Clone the repository
 
 ```bash
-git clone https://github.com/Erenimo3442/aws_acu_chatbot
+git clone https://github.com/ysferen/aws_acu_chatbot
 cd aws_acu_chatbot
 ```
 
